@@ -1,0 +1,72 @@
+import pandas as pd
+import hvplot.pandas
+import panel as pn
+pn.extension('tabulator')
+
+# Load dataset
+url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data'
+cols = ['mpg', 'cylinders', 'displacement', 'horsepower', 'weight',
+        'acceleration', 'model year', 'origin', 'car name']
+df = pd.read_csv(url, delim_whitespace=True, names=cols, na_values='?')
+df.dropna(inplace=True)
+df['origin'] = df['origin'].map({1: 'USA', 2: 'Europe', 3: 'Japan'})
+
+# Widgets
+origin_select = pn.widgets.Select(name='Origin', options=['All'] + sorted(df['origin'].unique()))
+year_slider = pn.widgets.IntSlider(name='Model Year', start=70, end=82, value=75)
+
+# Filter function
+def get_filtered_data(origin, year):
+    data = df.copy()
+    if origin != 'All':
+        data = data[data['origin'] == origin]
+    data = data[data['model year'] <= year]
+    return data
+
+# Visualisasi
+@pn.depends(origin_select, year_slider)
+def scatter_plot(origin, year):
+    data = get_filtered_data(origin, year)
+    return data.hvplot.scatter(
+        x='weight', y='mpg', color='cylinders', size=60,
+        cmap='Viridis', alpha=0.7,
+        title=f'Hubungan Weight dan MPG ({origin if origin!="All" else "Semua Asal"})'
+    )
+
+@pn.depends(origin_select, year_slider)
+def box_plot(origin, year):
+    data = get_filtered_data(origin, year)
+    return data.hvplot.box(
+        y='mpg', by='cylinders',
+        title=f'Distribusi MPG Berdasarkan Cylinders ({origin if origin!="All" else "Semua Asal"})'
+    )
+
+@pn.depends(origin_select)
+def line_plot(origin):
+    data = df if origin == 'All' else df[df['origin'] == origin]
+    avg = data.groupby('model year')['mpg'].mean().reset_index()
+    return avg.hvplot.line(
+        x='model year', y='mpg', color='orange', marker='o',
+        title=f'Tren Rata-rata MPG dari Tahun ke Tahun ({origin if origin!="All" else "Semua Asal"})'
+    )
+
+# Layout rapi
+dashboard = pn.Column(
+    pn.pane.Markdown("## 🚗 Dashboard Analisis Auto MPG\nMenampilkan hubungan dan tren efisiensi bahan bakar mobil."),
+    pn.Row(pn.Spacer(width=20), origin_select, year_slider),
+    pn.layout.Divider(),
+    pn.Row(scatter_plot, box_plot),
+    pn.layout.Divider(),
+    line_plot,
+    pn.layout.Divider(),
+    pn.pane.Markdown(
+        """
+        **Keterangan:**
+        - MPG (*Miles per Gallon*) menunjukkan efisiensi bahan bakar.
+        - Weight = berat kendaraan.
+        - Cylinders = jumlah silinder mesin.
+        - Origin = asal mobil (USA, Europe, Japan).
+        """
+    )
+)
+dashboard.servable()
